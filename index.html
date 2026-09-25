@@ -132,7 +132,7 @@
     <div class="card">
       <img src="assets/baby_title.png" alt="아기">
       <h1 id="menuTitle">아기 냠냠 대모험</h1>
-      <p id="menuText">아기가 기어다니며 과자를 냠냠!<br>🍼 젖병을 먹으면 유령을 잡을 수 있어요.<br>방향키 · 화면 밀기 · 버튼으로 움직여요.<br>너무 빠르면 위의 🐢 버튼으로 속도를 바꿔요.</p>
+      <p id="menuText">아기가 기어다니며 과자를 냠냠!<br>🍼 젖병을 먹으면 유령을 잡을 수 있어요.<br>가끔 나오는 🍓 딸기를 꼭 잡아요!<br>방향키 · 화면 밀기 · 버튼으로 움직여요.<br>너무 빠르면 위의 🐢 버튼으로 속도를 바꿔요.</p>
       <button class="btn" id="startBtn">시작하기</button>
     </div>
   </div>
@@ -428,7 +428,6 @@
       } else {
         score += 50; powerTime = Math.max(4, 7 - level * 0.5); ghostCombo = 0;
         playLaugh(["laugh1", "laugh2"], true);
-        showFace("happy");
         for (const g of ghosts) if (g.mode === "chase") { g.fright = true; g.dir = { x: -g.dir.x, y: -g.dir.y }; }
       }
       updateHud();
@@ -442,12 +441,13 @@
 
     // 과일 보너스
     fruitTimer += dt;
-    if (!fruit && fruitTimer > 14) { fruit = { x: FRUIT_AT.x, y: FRUIT_AT.y, t: 9, icon: ["🍓", "🍌", "🍎", "🧁"][level % 4] }; fruitTimer = 0; }
+    if (!fruit && fruitTimer > 14) { fruit = { x: FRUIT_AT.x, y: FRUIT_AT.y, t: 9, icon: "🍓" }; fruitTimer = 0; }
     if (fruit) {
       fruit.t -= dt;
       if (fruit.t <= 0) fruit = null;
       else if (Math.hypot(p.x - fruit.x, p.y - fruit.y) < 0.6) {
         score += 300; updateHud(); playLaugh(["giggle1", "giggle2"], true);
+        showFace("happy");
         popup("+300", fruit.x, fruit.y); fruit = null;
       }
     }
