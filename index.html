@@ -209,10 +209,36 @@
     const now = performance.now();
     if (!force && now < laughUntil) return; // 웃음소리가 겹치지 않게
     const name = names[Math.floor(Math.random() * names.length)];
-    const a = sounds[name].cloneNode();
+    playClip(name);
+    laughUntil = now + 700;
+  }
+
+  // 웃음소리는 Web Audio로 재생한다. 시작 버튼을 누를 때 한 번 잠금이 풀리면
+  // 이후에는 휴대폰(특히 아이폰)에서도 막히지 않는다.
+  const buffers = {};
+  let buffersLoading = null;
+  function loadBuffers() {
+    if (buffersLoading || !actx) return buffersLoading;
+    buffersLoading = Promise.all(Object.entries(SOUND_FILES).map(async ([k, src]) => {
+      try {
+        const res = await fetch(src);
+        buffers[k] = await actx.decodeAudioData(await res.arrayBuffer());
+      } catch {} // file:// 로 열었을 때 등은 아래 <audio> 방식으로 대신 재생
+    }));
+    return buffersLoading;
+  }
+  function playClip(name) {
+    if (actx && buffers[name]) {
+      if (actx.state !== "running") actx.resume();
+      const src = actx.createBufferSource(), g = actx.createGain();
+      src.buffer = buffers[name]; g.gain.value = 0.9;
+      src.connect(g).connect(actx.destination); src.start();
+      return;
+    }
+    const a = sounds[name];
+    try { a.pause(); a.currentTime = 0; } catch {}
     a.volume = 0.9;
     a.play().catch(() => {});
-    laughUntil = now + 700;
   }
   function beep(freq, dur, type = "sine", vol = 0.08, slideTo) {
     if (muted || !actx) return;
@@ -666,12 +692,30 @@
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && state === "play") state = "paused";
     else if (!document.hidden && state === "paused") { state = "ready"; stateTimer = 1; showToast("계속!"); }
+    if (!document.hidden && actx && actx.state !== "running") actx.resume();
   });
 
-  startBtn.addEventListener("click", () => {
+  let audioUnlocked = false;
+  function unlockAudio() {
+    // 아이폰 무음 스위치가 켜져 있어도 게임 소리가 나도록 (iOS 17+)
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
     try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {}
-    // 모바일에서 소리 잠금 해제
-    for (const a of Object.values(sounds)) { a.muted = true; a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; }); }
+    loadBuffers();
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    // <audio> 대체 재생용 잠금 해제
+    for (const a of Object.values(sounds)) {
+      a.muted = true;
+      a.play().then(() => { a.pause(); a.currentTime = 0; a.muted = false; }).catch(() => { a.muted = false; });
+    }
+  }
+  // 전화·알림 등으로 소리가 멈췄다가 돌아와도 다시 살린다
+  for (const ev of ["pointerdown", "keydown", "touchend"]) {
+    addEventListener(ev, () => { if (actx && actx.state !== "running") actx.resume(); }, { passive: true });
+  }
+
+  startBtn.addEventListener("click", () => {
+    unlockAudio();
     menu.classList.add("hidden");
     newGame();
   });
