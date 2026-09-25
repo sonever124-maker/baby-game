@@ -44,6 +44,35 @@
     border: none; background: var(--panel); font-size: 20px; width: 40px; height: 40px;
     border-radius: 50%; box-shadow: 0 2px 6px rgba(90,62,74,.15); cursor: pointer;
   }
+  #speed {
+    border: none; background: var(--panel); color: var(--ink); font-family: inherit; font-size: 15px;
+    height: 40px; padding: 0 12px; border-radius: 999px; box-shadow: 0 2px 6px rgba(90,62,74,.15); cursor: pointer;
+  }
+  #face {
+    position: absolute; top: 50%; left: 50%; width: min(62vw, 260px); aspect-ratio: 1;
+    transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
+  }
+  #face img {
+    width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+    border: 8px solid #fff; box-shadow: 0 10px 30px rgba(90,62,74,.35);
+    animation: facePop 1.3s ease-out forwards;
+  }
+  #face.angry img { border-color: #ff8f8f; animation-name: faceShake; }
+  #face.happy img { border-color: #ffd35c; }
+  @keyframes facePop {
+    0% { transform: scale(.2) rotate(-12deg); opacity: 0; }
+    18% { transform: scale(1.08) rotate(4deg); opacity: 1; }
+    30%, 80% { transform: scale(1) rotate(0); opacity: 1; }
+    100% { transform: scale(.9); opacity: 0; }
+  }
+  @keyframes faceShake {
+    0% { transform: scale(.3); opacity: 0; }
+    15% { transform: scale(1.05); opacity: 1; }
+    20%, 40% { transform: translateX(-10px); }
+    30%, 50% { transform: translateX(10px); }
+    60%, 82% { transform: none; opacity: 1; }
+    100% { transform: scale(.9); opacity: 0; }
+  }
   #wrap { position: relative; flex: 1; width: 100%; display: flex; justify-content: center; align-items: center; min-height: 0; }
   canvas { display: block; border-radius: 16px; box-shadow: 0 6px 20px rgba(228,107,138,.18); background: var(--floor); }
   .overlay {
@@ -70,8 +99,8 @@
     pointer-events: none; white-space: nowrap;
   }
   #pad {
-    display: grid; grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(2, 50px);
-    gap: 6px; padding: 8px 0 14px;
+    display: grid; grid-template-columns: repeat(3, 68px); grid-template-rows: repeat(3, 56px);
+    gap: 10px 26px; padding: 8px 0 16px;
   }
   #pad button {
     border: none; border-radius: 14px; background: var(--panel); color: var(--accent-dark);
@@ -80,7 +109,7 @@
   #pad button:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--wall-edge); }
   #pad .up { grid-column: 2; grid-row: 1; }
   #pad .left { grid-column: 1; grid-row: 2; }
-  #pad .down { grid-column: 2; grid-row: 2; }
+  #pad .down { grid-column: 2; grid-row: 3; }
   #pad .right { grid-column: 3; grid-row: 2; }
   @media (hover: hover) and (pointer: fine) { #pad { display: none; } }
   @keyframes bob { 50% { transform: translateY(-6px) rotate(-3deg); } }
@@ -91,17 +120,19 @@
   <div class="stat">점수<b id="score">0</b></div>
   <div class="stat">최고<b id="best">0</b></div>
   <div class="lives" id="lives"></div>
+  <button id="speed" aria-label="속도 바꾸기">🐢 느리게</button>
   <button id="mute" aria-label="소리 켜기/끄기">🔊</button>
 </header>
 
 <div id="wrap">
   <canvas id="game"></canvas>
   <div id="toast" class="hidden"></div>
+  <div id="face" class="hidden"><img alt=""></div>
   <div class="overlay" id="menu">
     <div class="card">
       <img src="assets/baby_title.png" alt="아기">
       <h1 id="menuTitle">아기 냠냠 대모험</h1>
-      <p id="menuText">아기가 기어다니며 과자를 냠냠!<br>🍼 젖병을 먹으면 유령을 잡을 수 있어요.<br>방향키 · 화면 밀기 · 버튼으로 움직여요.</p>
+      <p id="menuText">아기가 기어다니며 과자를 냠냠!<br>🍼 젖병을 먹으면 유령을 잡을 수 있어요.<br>방향키 · 화면 밀기 · 버튼으로 움직여요.<br>너무 빠르면 위의 🐢 버튼으로 속도를 바꿔요.</p>
       <button class="btn" id="startBtn">시작하기</button>
     </div>
   </div>
@@ -156,9 +187,21 @@
   const SOUND_FILES = {
     giggle1: "assets/giggle1.mp3", giggle2: "assets/giggle2.mp3",
     laugh1: "assets/laugh1.mp3", laugh2: "assets/laugh2.mp3", laughBig: "assets/laugh_big.mp3",
+    fail: "assets/fail.mp3",
   };
   const sounds = {};
   for (const [k, src] of Object.entries(SOUND_FILES)) { const a = new Audio(src); a.preload = "auto"; sounds[k] = a; }
+
+  const FACES = { angry: "assets/face_angry.jpg", happy: "assets/face_happy.jpg" };
+  for (const src of Object.values(FACES)) new Image().src = src;
+
+  // 속도: 게임 전체를 슬로모션처럼 늦춘다
+  const SPEEDS = [
+    { label: "🐢 느리게", mul: 0.6 },
+    { label: "🐇 보통", mul: 0.8 },
+    { label: "🚀 빠르게", mul: 1 },
+  ];
+  let speedIdx = 0;
 
   let muted = false, actx = null, laughUntil = 0;
   function playLaugh(names, force) {
@@ -254,6 +297,15 @@
     if (ms) showToast.t = setTimeout(() => toast.classList.add("hidden"), ms);
   }
 
+  function showFace(kind) {
+    const box = $("face"), img = box.querySelector("img");
+    box.className = kind;
+    img.src = FACES[kind];
+    img.style.animation = "none"; void img.offsetWidth; img.style.animation = ""; // 애니메이션 다시 시작
+    clearTimeout(showFace.t);
+    showFace.t = setTimeout(() => box.classList.add("hidden"), 1300);
+  }
+
   function updateHud() {
     scoreEl.textContent = score;
     if (score > best) { best = score; bestEl.textContent = best; store.set("babyPacBest", best); }
@@ -326,6 +378,7 @@
 
   // ---------- 업데이트 ----------
   function update(dt) {
+    dt *= SPEEDS[speedIdx].mul;
     if (state === "ready") {
       stateTimer -= dt;
       if (stateTimer <= 0) { state = "play"; toast.classList.add("hidden"); }
@@ -352,6 +405,13 @@
     // 아기
     const p = player;
     if (p.next.x === -p.dir.x && p.next.y === -p.dir.y && p.dir !== NONE) p.dir = p.next; // 즉시 뒤돌기
+    // 쉬운 방향 전환: 갈림길 근처(반 칸 이내)에서 누르면 바로 꺾는다
+    if (p.next !== p.dir && p.dir !== NONE && !(p.next.x === -p.dir.x && p.next.y === -p.dir.y)) {
+      const cx = Math.round(p.x), cy = Math.round(p.y);
+      if (Math.abs(p.x - cx) + Math.abs(p.y - cy) <= 0.5 && canWalk(cx + p.next.x, cy + p.next.y)) {
+        p.x = cx; p.y = cy; p.dir = p.next;
+      }
+    }
     const wasMoving = p.dir !== NONE;
     move(p, p.speed * dt, playerChoose, () => false);
     if (p.dir.x) p.face = p.dir.x;
@@ -368,6 +428,7 @@
       } else {
         score += 50; powerTime = Math.max(4, 7 - level * 0.5); ghostCombo = 0;
         playLaugh(["laugh1", "laugh2"], true);
+        showFace("happy");
         for (const g of ghosts) if (g.mode === "chase") { g.fright = true; g.dir = { x: -g.dir.x, y: -g.dir.y }; }
       }
       updateHud();
@@ -424,8 +485,9 @@
           playLaugh(["giggle1", "giggle2"], true);
         } else {
           lives--; updateHud();
-          state = "dying"; stateTimer = 1.8;
-          beep(520, 0.9, "sine", 0.1, 140);
+          state = "dying"; stateTimer = 2;
+          playLaugh(["fail"], true);
+          showFace("angry");
           showToast("앗! 으앙~ 😢");
           return;
         }
@@ -496,7 +558,7 @@
     ctx.save();
     ctx.translate(cx, cy);
     if (state === "dying") {
-      const k = Math.max(0, stateTimer / 1.8);
+      const k = Math.max(0, stateTimer / 2);
       ctx.rotate((1 - k) * Math.PI * 3); ctx.scale(k, k);
     } else {
       ctx.translate(0, Math.sin(p.anim * 1.6) * tile * 0.05);
@@ -593,6 +655,12 @@
   for (const b of document.querySelectorAll("#pad button")) {
     b.addEventListener("pointerdown", e => { e.preventDefault(); setDir(b.dataset.dir); });
   }
+
+  const speedBtn = $("speed");
+  function applySpeed() { speedBtn.textContent = SPEEDS[speedIdx].label; store.set("babyPacSpeed", speedIdx); }
+  speedIdx = Math.min(SPEEDS.length - 1, Math.max(0, +store.get("babyPacSpeed") || 0));
+  applySpeed();
+  speedBtn.addEventListener("click", () => { speedIdx = (speedIdx + 1) % SPEEDS.length; applySpeed(); speedBtn.blur(); });
 
   $("mute").addEventListener("click", () => { muted = !muted; $("mute").textContent = muted ? "🔇" : "🔊"; });
   document.addEventListener("visibilitychange", () => {
